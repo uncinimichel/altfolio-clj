@@ -18,7 +18,7 @@
   ([response json?]
    (let [{:keys [status headers body]} response]
      (if (= status 200)
-       (json/read-str body)
+       (json/read-str body :key-fn keyword)
        status))))
 
 (defn pp [r] (clojure.pprint/pprint r))
