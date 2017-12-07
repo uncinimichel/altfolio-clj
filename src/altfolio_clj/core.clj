@@ -78,14 +78,14 @@
 (def query-coinmarket
   (map (fn [{:keys [:feed/id :feed/url] :as stream}]
          (let [response (common/parse-response (<!! (common/http-get url)))]
-           (merge stream {:feed/response response})))))
+           (merge stream {:feed/response (get response 0)})))))
 
 (def adapter-coinmarket
   "map coinmarket raw response to domain with the :crypto/SYM as a key"
   (map (fn [{:keys [:feed/id :feed/response] :as stream}]
-        
          (let [domain-crypto (get-in coinmarket-to-domain [:id id])]
            (assoc stream :feed/response (reduce (fn [old-map [k-from k-to]]
+                                                  (println k-from "---" k-to)
                                                   #break
                                                   (assoc old-map k-to (k-from response)))
                                                 {}
@@ -144,15 +144,8 @@
     (pipeline-blocking parallelism out-updated-altfolio update-altfolio out-response)
     out-updated-altfolio))
 
-;;(comment
+
+
 (let [feeds [{:feed/id :ethereum} {:feed/id :iota}]
       a (<!! (async/reduce conj [] (updating-coinmarket-pipeline (to-chan feeds))))]
-  (common/pp a)
-  a)
-
-
-(defn ciao [a]
-  
-  (  println a))
-
-(ciao "mike")
+  (common/pp a))
