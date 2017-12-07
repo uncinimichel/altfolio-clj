@@ -41,15 +41,15 @@
                           (:altfolio/current v))])))
 
 
-(defn api-url-fomat [convert crypto] (format "https://api.coinmarketcap.com/v1/ticker/%s/?convert=%s/" crypto convert))
+(defn api-url-fomat [convert crypto] (format "https://api.coinmarketcap.com/v1/ticker/%s/?convert=%s/" (name crypto) convert))
 
 (defn update-feed
   [altfolio feed]
   (let [{:keys [:feed/crypto :feed/property :feed/new-v]} feed]
     (swap! altfolio assoc-in [crypto property] new-v)))
 
-(defn updade-altfolio [] 
-  (update-feed altfolio (get-feed)))
+(def update-altfolio
+  (map identity))
 
 (common/pp (common/parse-response (<!! (common/http-get "https://api.coinmarketcap.com/v1/ticker/ripple/?convert=GBP"))))
 
@@ -81,14 +81,15 @@
            (merge stream {:feed/response response})))))
 
 (def adapter-coinmarket
-  "map coinmarket response to domain with the :crypto/SYM as a key"
-  (map (fn [{:keys [:feed/id :feed/response]}]
-         (let [domain-crypto (get-in coinmarket-to-domain [:id id])
-               props (:props coinmarket-to-domain)]
-           (hash-map domain-crypto (reduce (fn [old-map [k-from k-to]]
-                                             (assoc old-map k-to (k-from response)))
-                                           {}
-                                           (:props coinmarket-to-domain)))))))
+  "map coinmarket raw response to domain with the :crypto/SYM as a key"
+  (map (fn [{:keys [:feed/id :feed/response] :as stream}]
+        
+         (let [domain-crypto (get-in coinmarket-to-domain [:id id])]
+           (assoc stream :feed/response (reduce (fn [old-map [k-from k-to]]
+                                                  #break
+                                                  (assoc old-map k-to (k-from response)))
+                                                {}
+                                                (:props coinmarket-to-domain)))))))
 
 (def update-domain
   (map (fn [{:keys [:feed/id :feed/response]}]
@@ -122,10 +123,6 @@
 (def pipe2 {:feed/id :iota
             :feed/response mock-response})
 
-
-(keys (transduce adapter-coinmarket into {} [pipe pipe2]))
-(transduce adapter-coinmarket into {} [pipe])
-
 (comment
   (time (into {} (for [[k-from k-to] (:props coinmarket-to-domain)]
                    [k-to (k-from mock-response)])))
@@ -137,13 +134,25 @@
 (defn updating-coinmarket-pipeline
   [in]
   (let [out-urls (chan 1)
-        out-raw-response (chan 1)]
+        out-raw-response (chan 1)
+        out-response (chan 1)
+        out-updated-altfolio (chan 1)]
+    ;; Prepare all the urls and return a
     (pipeline-blocking parallelism out-urls get-urls in)
-    (pipeline-blocking parallelism out-raw-response query-coinmarket get-urls)
-    out-raw-response))
+    (pipeline-blocking parallelism out-raw-response query-coinmarket out-urls)
+    (pipeline-blocking parallelism out-response adapter-coinmarket out-raw-response)
+    (pipeline-blocking parallelism out-updated-altfolio update-altfolio out-response)
+    out-updated-altfolio))
 
-(comment
-  (let [feeds [{:feed/id :ethereum} {:feed/id :iota}]
-        a (<!! (async/reduce merge {} (updating-coinmarket-pipeline (to-chan feeds))))]
-    (common/pp a)
-    a))
+;;(comment
+(let [feeds [{:feed/id :ethereum} {:feed/id :iota}]
+      a (<!! (async/reduce conj [] (updating-coinmarket-pipeline (to-chan feeds))))]
+  (common/pp a)
+  a)
+
+
+(defn ciao [a]
+  
+  (  println a))
+
+(ciao "mike")
